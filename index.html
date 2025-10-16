@@ -1,147 +1,48 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="UTF-8">
-  <title>Чат с фото и звонками</title>
-  <style>
-    body {
-      font-family: sans-serif;
-      background: #111;
-      color: #eee;
-      padding: 20px;
+ementById("to").value.trim();
+      const text = document.getElementById("text").value.trim();
+      if (!to || !text) return;
+      try {
+        const res = await fetch(`${SERVER}/send`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ from: clientId, to, text })
+        });
+        if (res.ok) {
+          addMsg(`✅ Отправлено ${to}: ${text}`);
+          document.getElementById("text").value = "";
+        } else {
+          const t = await res.text();
+          addMsg("❌ Ошибка отправки: " + t);
+        }
+      } catch (e) {
+        addMsg("❌ Ошибка отправки: " + e);
+      }
     }
-    #chat {
-      height: 400px;
-      overflow-y: auto;
-      border: 1px solid #444;
-      padding: 10px;
-      background: #222;
-      margin-bottom: 10px;
-    }
-    .msg {
-      margin-bottom: 8px;
-      padding: 6px;
-      background: #333;
-      border-radius: 6px;
-    }
-    .msg img {
-      max-width: 200px;
-      display: block;
-      margin-top: 5px;
-      border-radius: 5px;
-    }
-    input, button {
-      background: #333;
-      color: #eee;
-      border: 1px solid #555;
-      padding: 6px;
-      margin: 4px 0;
-    }
-  </style>
-</head>
-<body>
-  <h2>📱 Чат с фото и аудио-звонками</h2>
-  <p>Ваш ID: <span id="myid">...</span></p>
 
-  <div id="chat"></div>
+    const seen = new Set();
 
-  <input type="text" id="to" placeholder="Кому (ID или all)">
-  <input type="text" id="text" placeholder="Сообщение">
-  <input type="file" id="photo" accept="image/*">
-  <button onclick="sendMessage()">Отправить</button>
-
-  <hr>
-  <h3>🔊 Аудио-звонок</h3>
-  <input type="text" id="callTo" placeholder="ID для звонка">
-  <button onclick="startCall()">Позвонить</button>
-  <audio id="remoteAudio" autoplay></audio>
-
-  <script>
-    const SERVER = "https://send-gvt0.onrender.com";
-    const clientId = crypto.randomUUID();
-    document.getElementById("myid").textContent = clientId;
-
-    // ===== Регистрация =====
-    fetch(SERVER + "/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: clientId })
-    }).then(r => console.log("✅ Зарегистрирован"));
-
-    // ===== Получение сообщений =====
     async function pollMessages() {
       try {
         const res = await fetch(`${SERVER}/messages/${clientId}`);
         const data = await res.json();
         for (const msg of data.messages || []) {
-          const div = document.createElement("div");
-          div.className = "msg";
-          div.innerHTML = `<b>${msg.from} → ${msg.to}</b>: ${msg.text || ""}`;
-          if (msg.image) {
-            const img = document.createElement("img");
-            img.src = msg.image;
-            div.appendChild(img);
+          const key = ${msg.from}-${msg.to}-${msg.text};
+          if (!seen.has(key)) {
+            addMsg(`📩 ${msg.from} → ${msg.to}: ${msg.text}`);
+            seen.add(key);
           }
-          document.getElementById("chat").appendChild(div);
-          document.getElementById("chat").scrollTop = 99999;
         }
       } catch (e) {
-        console.warn("Ошибка получения сообщений", e);
+        addMsg("❌ Ошибка получения сообщений: " + e);
       }
-      setTimeout(pollMessages, 3000);
-    }
-    pollMessages();
-
-    // ===== Отправка сообщений и фото =====
-    async function sendMessage() {
-      const to = document.getElementById("to").value.trim();
-      const text = document.getElementById("text").value.trim();
-      const file = document.getElementById("photo").files[0];
-      let imageData = null;
-
-      if (file) {
-        const reader = new FileReader();
-        reader.onload = async () => {
-          imageData = reader.result;
-          await send(to, text, imageData);
-        };
-        reader.readAsDataURL(file);
-      } else {
-        await send(to, text, null);
-      }
-
-      document.getElementById("text").value = "";
-      document.getElementById("photo").value = "";
     }
 
-    async function send(to, text, image) {
-      const payload = { from: clientId, to, text, image };
-      const res = await fetch(`${SERVER}/send`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-      console.log(await res.text());
+    function addMsg(text) {
+      const div = document.createElement("div");
+      div.className = "msg";
+      div.textContent = text;
+      chat.appendChild(div);
+chat.scrollTop = chat.scrollHeight;
     }
 
-    // ===== Аудио-звонок =====
-    let localStream, peer;
-    async function startCall() {
-      const callTo = document.getElementById("callTo").value.trim();
-      if (!callTo) return alert("Введите ID для звонка");
-      peer = new RTCPeerConnection();
-      peer.ontrack = e => document.getElementById("remoteAudio").srcObject = e.streams[0];
-      localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      localStream.getTracks().forEach(t => peer.addTrack(t, localStream));
-      const offer = await peer.createOffer();
-      await peer.setLocalDescription(offer);
-      await fetch(`${SERVER}/call`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ from: clientId, to: callTo, offer })
-      });
-      console.log("📞 Отправлен звонок");
-    }
-  </script>
-</body>
-</html>
+    document.getElementById("send").addEventListener("click", 
