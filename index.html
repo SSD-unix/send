@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
   <title>Render Chat Client</title>
   <style>
     body {
@@ -15,13 +15,19 @@
     }
     #chat {
       width: 600px;
-      background: #1e1e1e;
-      border-radius: 10px;
-      padding: 15px;
       height: 400px;
       overflow-y: auto;
+      background: #1e1e1e;
+      border-radius: 10px;
+      padding: 10px;
       margin-bottom: 15px;
       box-shadow: 0 0 10px #000;
+    }
+    .msg {
+      margin: 5px 0;
+      background: #2a2a2a;
+      padding: 5px 10px;
+      border-radius: 5px;
     }
     #input-area {
       display: flex;
@@ -40,20 +46,13 @@
       background: #2b8cff;
       color: white;
       cursor: pointer;
-      transition: background 0.3s;
     }
     button:hover {
-      background: #176de0;
+      background: #1a5fdb;
     }
     #clients {
       margin-top: 10px;
       width: 600px;
-    }
-    .msg {
-      margin: 5px 0;
-      padding: 5px 10px;
-      background: #2a2a2a;
-      border-radius: 5px;
     }
   </style>
 </head>
@@ -77,10 +76,19 @@
   <script>
     const SERVER = "https://send-gvt0.onrender.com";
     const clientId = crypto.randomUUID();
-    const POLL_INTERVAL = 3000;
     document.getElementById("client-id").textContent = clientId;
 
     const chat = document.getElementById("chat");
+    const POLL_INTERVAL = 3000;
+    const seen = new Set();
+
+    function addMsg(text) {
+      const div = document.createElement("div");
+      div.className = "msg";
+      div.textContent = text;
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
 
     async function register() {
       try {
@@ -89,11 +97,9 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id: clientId })
         });
-        if (res.ok) {
-          addMsg("✅ Зарегистрирован на сервере");
-        } else {
-          addMsg("❌ Ошибка регистрации");
-        }
+        const text = await res.text();
+        if (res.ok) addMsg("✅ Зарегистрирован на сервере");
+        else addMsg("❌ Ошибка регистрации: " + text);
       } catch (e) {
         addMsg("❌ Не удалось зарегистрироваться: " + e);
       }
@@ -102,11 +108,17 @@
     async function listClients() {
       try {
         const res = await fetch(`${SERVER}/clients`);
-        const data = await res.json();
-        const clients = data.clients || [];
+        const text = await res.text();
+        let clients = [];
+        try {
+          const data = JSON.parse(text);
+          clients = data.clients || [];
+        } catch {
+          addMsg("⚠️ Сервер вернул не-JSON: " + text);
+        }
         document.getElementById("clientList").textContent = "Клиенты: " + clients.join(", ");
-      } catch {
-        document.getElementById("clientList").textContent = "Ошибка получения списка клиентов";
+      } catch (e) {
+        addMsg("❌ Ошибка получения клиентов: " + e);
       }
     }
 
@@ -114,32 +126,37 @@
       const to = document.getElementById("to").value.trim();
       const text = document.getElementById("text").value.trim();
       if (!to || !text) return;
+
       try {
         const res = await fetch(`${SERVER}/send`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ from: clientId, to, text })
         });
-        if (res.ok) {
-          addMsg(`✅ Отправлено ${to}: ${text}`);
-          document.getElementById("text").value = "";
-        } else {
-          const t = await res.text();
-          addMsg("❌ Ошибка отправки: " + t);
-        }
+        const respText = await res.text();
+        if (res.ok) addMsg(`✅ Отправлено → ${to}: ${text}`);
+        else addMsg(`❌ Ошибка отправки (${res.status}): ${respText}`);
       } catch (e) {
         addMsg("❌ Ошибка отправки: " + e);
       }
     }
 
-    const seen = new Set();
-
     async function pollMessages() {
       try {
         const res = await fetch(`${SERVER}/messages/${clientId}`);
-        const data = await res.json();
+        const text = await res.text();
+        if (!text.trim()) return; // пустой ответ — ничего не делать
+
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          addMsg("⚠️ Ответ не JSON: " + text);
+          return;
+        }
+
         for (const msg of data.messages || []) {
-          const key = ${msg.from}-${msg.to}-${msg.text};
+          const key = `${msg.from}-${msg.to}-${msg.text}`;
           if (!seen.has(key)) {
             addMsg(`📩 ${msg.from} → ${msg.to}: ${msg.text}`);
             seen.add(key);
@@ -148,14 +165,6 @@
       } catch (e) {
         addMsg("❌ Ошибка получения сообщений: " + e);
       }
-    }
-
-    function addMsg(text) {
-      const div = document.createElement("div");
-      div.className = "msg";
-      div.textContent = text;
-      chat.appendChild(div);
-      chat.scrollTop = chat.scrollHeight;
     }
 
     document.getElementById("send").addEventListener("click", sendMessage);
