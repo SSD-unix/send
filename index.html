@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>Чат с фото и видео (Base64)</title>
+<title>Чат с фото и видео (Base64) — Исправленный</title>
 <style>
 body {
   font-family: sans-serif;
@@ -56,6 +56,8 @@ const clientId = crypto.randomUUID();
 document.getElementById("myid").textContent = clientId;
 const chat = document.getElementById("chat");
 
+let sending = false; // флаг, чтобы не отправлять несколько файлов одновременно
+
 // ===== Регистрация клиента =====
 fetch(`${SERVER}/register`, {
   method: "POST",
@@ -86,43 +88,45 @@ function addMsg(text, media=null, type=null) {
 
 // ===== Отправка сообщения или медиа =====
 document.getElementById("send").addEventListener("click", () => {
+  if (sending) return; // уже отправляется
   const to = document.getElementById("to").value.trim();
   const text = document.getElementById("text").value.trim();
   const file = document.getElementById("file").files[0];
 
   if (!to && !text && !file) return alert("Введите сообщение или выберите файл");
 
+  sending = true;
+
+  const sendPayload = async (mediaData, type) => {
+    const payload = { from: clientId, to, text, media: mediaData, type };
+    try {
+      const res = await fetch(`${SERVER}/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) addMsg(`✅ Отправлено → ${to}: ${text}`, mediaData, type);
+      else addMsg("❌ Ошибка отправки: " + (await res.text()));
+    } catch (e) {
+      addMsg("❌ Ошибка отправки: " + e);
+    } finally {
+      sending = false;
+    }
+  }
+
   if (file) {
     const reader = new FileReader();
     reader.onload = async () => {
-      const mediaData = reader.result; // Base64 с префиксом data:image/... или data:video/...
-      const payload = { from: clientId, to, text, media: mediaData, type: file.type };
-      await sendMessage(payload);
+      await sendPayload(reader.result, file.type);
     };
     reader.readAsDataURL(file);
   } else {
-    const payload = { from: clientId, to, text, media: null, type: null };
-    sendMessage(payload);
+    sendPayload(null, null);
   }
 
   document.getElementById("text").value = "";
   document.getElementById("file").value = "";
 });
-
-// ===== Отправка JSON на сервер =====
-async function sendMessage(payload) {
-  try {
-    const res = await fetch(`${SERVER}/send`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-    if (res.ok) addMsg(`✅ Отправлено → ${payload.to}: ${payload.text}`, payload.media, payload.type);
-    else addMsg("❌ Ошибка отправки: " + (await res.text()));
-  } catch (e) {
-    addMsg("❌ Ошибка отправки: " + e);
-  }
-}
 
 // ===== Получение сообщений каждые 3 секунды =====
 const seen = new Set();
