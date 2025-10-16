@@ -1,15 +1,126 @@
-ementById("to").value.trim();
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Чат с фото и видео</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #111;
+      color: #eee;
+      padding: 20px;
+    }
+    #chat {
+      height: 400px;
+      overflow-y: auto;
+      border: 1px solid #444;
+      padding: 10px;
+      background: #222;
+      margin-bottom: 10px;
+    }
+    .msg {
+      margin-bottom: 10px;
+      padding: 8px;
+      background: #333;
+      border-radius: 6px;
+    }
+    .msg img, .msg video {
+      max-width: 250px;
+      margin-top: 5px;
+      border-radius: 6px;
+      display: block;
+    }
+    input, button {
+      background: #333;
+      color: #eee;
+      border: 1px solid #555;
+      padding: 6px;
+      margin: 4px 0;
+    }
+  </style>
+</head>
+<body>
+  <h2>💬 Чат с фото и видео</h2>
+  <p>Ваш ID: <span id="myid">...</span></p>
+
+  <div id="chat"></div>
+
+  <input type="text" id="to" placeholder="Кому (ID или all)">
+  <input type="text" id="text" placeholder="Сообщение">
+  <input type="file" id="file" accept="image/*,video/*">
+  <button id="send">Отправить</button>
+
+  <script>
+    const SERVER = "https://send-gvt0.onrender.com";
+    const clientId = crypto.randomUUID();
+    document.getElementById("myid").textContent = clientId;
+    const chat = document.getElementById("chat");
+
+    // ===== Регистрация =====
+    fetch(`${SERVER}/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: clientId })
+    }).then(() => console.log("✅ Зарегистрирован на сервере"));
+
+    // ===== Добавление сообщения в чат =====
+    function addMsg(text, media = null, type = null) {
+      const div = document.createElement("div");
+      div.className = "msg";
+      div.textContent = text;
+      if (media) {
+        if (type.startsWith("image")) {
+          const img = document.createElement("img");
+          img.src = media;
+          div.appendChild(img);
+        } else if (type.startsWith("video")) {
+          const video = document.createElement("video");
+          video.src = media;
+          video.controls = true;
+          div.appendChild(video);
+        }
+      }
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    // ===== Отправка сообщения =====
+    document.getElementById("send").addEventListener("click", async () => {
+      const to = document.getElementById("to").value.trim();
       const text = document.getElementById("text").value.trim();
-      if (!to || !text) return;
+      const file = document.getElementById("file").files[0];
+
+      if (!to && !file && !text) return alert("Введите сообщение или выберите файл");
+
+      let mediaData = null;
+      let fileType = null;
+
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = async () => {
+          mediaData = reader.result;
+          fileType = file.type;
+          await send(to, text, mediaData, fileType);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        await send(to, text, null, null);
+      }
+
+      document.getElementById("text").value = "";
+      document.getElementById("file").value = "";
+    });
+
+    async function send(to, text, media, type) {
+      const payload = { from: clientId, to, text, media, type };
       try {
         const res = await fetch(`${SERVER}/send`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ from: clientId, to, text })
+          body: JSON.stringify(payload)
         });
         if (res.ok) {
-          addMsg(`✅ Отправлено ${to}: ${text}`);
-          document.getElementById("text").value = "";
+          addMsg(`✅ Отправлено → ${to}: ${text}`, media, type);
         } else {
           const t = await res.text();
           addMsg("❌ Ошибка отправки: " + t);
@@ -19,30 +130,25 @@ ementById("to").value.trim();
       }
     }
 
+    // ===== Получение сообщений =====
     const seen = new Set();
-
     async function pollMessages() {
       try {
         const res = await fetch(`${SERVER}/messages/${clientId}`);
         const data = await res.json();
         for (const msg of data.messages || []) {
-          const key = ${msg.from}-${msg.to}-${msg.text};
+          const key = `${msg.from}-${msg.to}-${msg.text}`;
           if (!seen.has(key)) {
-            addMsg(`📩 ${msg.from} → ${msg.to}: ${msg.text}`);
+            addMsg(`📩 ${msg.from} → ${msg.to}: ${msg.text}`, msg.media, msg.type);
             seen.add(key);
           }
         }
       } catch (e) {
         addMsg("❌ Ошибка получения сообщений: " + e);
       }
+      setTimeout(pollMessages, 3000);
     }
-
-    function addMsg(text) {
-      const div = document.createElement("div");
-      div.className = "msg";
-      div.textContent = text;
-      chat.appendChild(div);
-chat.scrollTop = chat.scrollHeight;
-    }
-
-    document.getElementById("send").addEventListener("click", 
+    pollMessages();
+  </script>
+</body>
+</html>
