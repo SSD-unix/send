@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <title>Render Chat Client + Фото</title>
+  <meta charset="UTF-8" />
+  <title>Render Chat + Звонки</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -23,6 +23,12 @@
       margin-bottom: 15px;
       box-shadow: 0 0 10px #000;
     }
+    video {
+      width: 280px;
+      border-radius: 10px;
+      margin: 5px;
+      background: #000;
+    }
     .msg {
       margin: 5px 0;
       background: #2a2a2a;
@@ -30,27 +36,18 @@
       border-radius: 5px;
       word-wrap: break-word;
     }
-    .msg img {
-      max-width: 100%;
-      border-radius: 8px;
-      margin-top: 5px;
-    }
-    #input-area {
+    #controls {
       display: flex;
-      flex-direction: column;
       gap: 10px;
       width: 600px;
-    }
-    .inputs {
-      display: flex;
-      gap: 10px;
+      margin-bottom: 10px;
     }
     input, button {
       padding: 10px;
       border: none;
       border-radius: 5px;
     }
-    input[type="text"] {
+    input {
       flex: 1;
     }
     button {
@@ -61,175 +58,111 @@
     button:hover {
       background: #1a5fdb;
     }
-    #clients {
-      margin-top: 10px;
-      width: 600px;
-    }
   </style>
 </head>
 <body>
-  <h1>💬 Render Chat + Фото</h1>
-  <p>Ваш ID: <b id="client-id"></b>
-     <button id="copy-id">📋 Скопировать</button>
-  </p>
+  <h1>💬 Render Chat + 📞 Звонки</h1>
+  <p>Ваш ID: <b id="client-id"></b></p>
 
   <div id="chat"></div>
 
-  <div id="input-area">
-    <div class="inputs">
-      <input id="to" type="text" placeholder="Кому (client_id / group / all)" />
-      <input id="text" type="text" placeholder="Сообщение..." />
-      <input id="file" type="file" accept="image/*" />
-      <button id="send">📤</button>
-    </div>
+  <div id="controls">
+    <input id="peer-id" placeholder="ID собеседника" />
+    <button id="callBtn">📞 Позвонить</button>
   </div>
 
-  <div id="clients">
-    <button id="loadClients">Показать клиентов</button>
-    <div id="clientList"></div>
-  </div>
+  <video id="localVideo" autoplay muted></video>
+  <video id="remoteVideo" autoplay></video>
 
   <script>
     const SERVER = "https://send-gvt0.onrender.com";
     const clientId = crypto.randomUUID();
-    const POLL_INTERVAL = 3000;
-    const seen = new Set();
-    const chat = document.getElementById("chat");
     document.getElementById("client-id").textContent = clientId;
 
-    function addMsg(text, from, to) {
-      const div = document.createElement("div");
-      div.className = "msg";
-      if (from && to)
-        div.innerHTML = `<b>${from} → ${to}:</b> ${text}`;
-      else div.textContent = text;
-      chat.appendChild(div);
-      chat.scrollTop = chat.scrollHeight;
+    let pc; // PeerConnection
+    let localStream;
+
+    async function startCall() {
+      const peerId = document.getElementById("peer-id").value.trim();
+      if (!peerId) return alert("Введите ID собеседника");
+
+      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      document.getElementById("localVideo").srcObject = localStream;
+
+      pc = createPeerConnection(peerId);
+
+      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+
+      // Отправляем offer собеседнику
+      await sendSignal(peerId, { type: "offer", offer, from: clientId });
     }
 
-    function addImageMsg(from, to, base64) {
-      const div = document.createElement("div");
-      div.className = "msg";
-      div.innerHTML = `<b>${from} → ${to}:</b><br><img src="${base64}"/>`;
-      chat.appendChild(div);
-      chat.scrollTop = chat.scrollHeight;
-    }
+    function createPeerConnection(peerId) {
+      const pc = new RTCPeerConnection();
 
-    async function register() {
-      try {
-        const res = await fetch(`${SERVER}/register`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: clientId })
-        });
-        if (res.ok) addMsg("✅ Зарегистрирован на сервере");
-        else addMsg("❌ Ошибка регистрации: " + (await res.text()));
-      } catch (e) {
-        addMsg("❌ Не удалось зарегистрироваться: " + e);
-      }
-    }
+      pc.ontrack = (event) => {
+        document.getElementById("remoteVideo").srcObject = event.streams[0];
+      };
 
-    async function listClients() {
-      try {
-        const res = await fetch(`${SERVER}/clients`);
-        const text = await res.text();
-        let clients = [];
-        try {
-          const data = JSON.parse(text);
-          clients = data.clients || [];
-        } catch {
-          addMsg("⚠️ Сервер вернул не JSON: " + text);
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          sendSignal(peerId, { type: "candidate", candidate: event.candidate, from: clientId });
         }
-        document.getElementById("clientList").textContent = "Клиенты: " + clients.join(", ");
-      } catch (e) {
-        addMsg("❌ Ошибка получения клиентов: " + e);
-      }
+      };
+
+      return pc;
     }
 
-    async function sendMessage() {
-      const to = document.getElementById("to").value.trim();
-      const text = document.getElementById("text").value.trim();
-      const fileInput = document.getElementById("file");
-
-      if (!to) return alert("Укажи получателя!");
-
-      let payload = { from: clientId, to, text };
-      if (fileInput.files.length > 0) {
-        const file = fileInput.files[0];
-        const base64 = await toBase64(file);
-        payload.text = "[image]" + base64; // помечаем как фото
-        fileInput.value = "";
-      }
-
-      try {
-        const res = await fetch(`${SERVER}/send`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        });
-        const respText = await res.text();
-        if (res.ok) {
-          if (payload.text.startsWith("[image]"))
-            addImageMsg("Вы", to, payload.text.slice(7));
-          else addMsg(`✅ Вы → ${to}: ${text}`);
-          document.getElementById("text").value = "";
-        } else addMsg(`❌ Ошибка отправки: ${respText}`);
-      } catch (e) {
-        addMsg("❌ Ошибка отправки: " + e);
-      }
-    }
-
-    function toBase64(file) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
+    async function sendSignal(to, data) {
+      await fetch(`${SERVER}/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ from: clientId, to, text: "[signal]" + JSON.stringify(data) })
       });
     }
 
-    async function pollMessages() {
-      try {
-        const res = await fetch(`${SERVER}/messages/${clientId}`);
-        const text = await res.text();
-        if (!text.trim()) return;
+    async function pollSignals() {
+      const res = await fetch(`${SERVER}/messages/${clientId}`);
+      const text = await res.text();
+      if (!text.trim()) return;
 
-        let data;
-        try {
-          data = JSON.parse(text);
-        } catch {
-          addMsg("⚠️ Ответ не JSON: " + text);
-          return;
+      let data;
+      try { data = JSON.parse(text); } catch { return; }
+
+      for (const msg of data.messages || []) {
+        if (!msg.text.startsWith("[signal]")) continue;
+
+        const signal = JSON.parse(msg.text.slice(8));
+        if (signal.type === "offer") {
+          await handleOffer(signal.offer, signal.from);
+        } else if (signal.type === "answer") {
+          await pc.setRemoteDescription(new RTCSessionDescription(signal.answer));
+        } else if (signal.type === "candidate") {
+          await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
         }
-
-        for (const msg of data.messages || []) {
-          const key = `${msg.from}-${msg.to}-${msg.text}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-
-          if (msg.text.startsWith("[image]")) {
-            const base64 = msg.text.slice(7);
-            addImageMsg(msg.from, msg.to, base64);
-          } else {
-            addMsg(msg.text, msg.from, msg.to);
-          }
-        }
-      } catch (e) {
-        addMsg("❌ Ошибка получения сообщений: " + e);
       }
     }
 
-    // Кнопка "Скопировать ID"
-    document.getElementById("copy-id").addEventListener("click", () => {
-      navigator.clipboard.writeText(clientId);
-      addMsg("📋 ID скопирован в буфер обмена");
-    });
+    async function handleOffer(offer, from) {
+      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      document.getElementById("localVideo").srcObject = localStream;
 
-    document.getElementById("send").addEventListener("click", sendMessage);
-    document.getElementById("loadClients").addEventListener("click", listClients);
+      pc = createPeerConnection(from);
+      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
-    register();
-    setInterval(pollMessages, POLL_INTERVAL);
+      await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+
+      await sendSignal(from, { type: "answer", answer, from: clientId });
+    }
+
+    document.getElementById("callBtn").addEventListener("click", startCall);
+
+    setInterval(pollSignals, 2000);
   </script>
 </body>
 </html>
