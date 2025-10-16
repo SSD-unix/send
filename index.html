@@ -4,43 +4,43 @@
 <meta charset="UTF-8">
 <title>Чат с фото и видео (Base64)</title>
 <style>
-  body {
-    font-family: sans-serif;
-    background: #111;
-    color: #eee;
-    padding: 20px;
-  }
-  #chat {
-    height: 400px;
-    overflow-y: auto;
-    border: 1px solid #444;
-    padding: 10px;
-    background: #222;
-    margin-bottom: 10px;
-  }
-  .msg {
-    margin-bottom: 10px;
-    padding: 8px;
-    background: #333;
-    border-radius: 6px;
-  }
-  .msg img, .msg video {
-    max-width: 250px;
-    margin-top: 5px;
-    border-radius: 6px;
-    display: block;
-  }
-  input, button {
-    background: #333;
-    color: #eee;
-    border: 1px solid #555;
-    padding: 6px;
-    margin: 4px 0;
-  }
+body {
+  font-family: sans-serif;
+  background: #111;
+  color: #eee;
+  padding: 20px;
+}
+#chat {
+  height: 400px;
+  overflow-y: auto;
+  border: 1px solid #444;
+  padding: 10px;
+  background: #222;
+  margin-bottom: 10px;
+}
+.msg {
+  margin-bottom: 10px;
+  padding: 8px;
+  background: #333;
+  border-radius: 6px;
+}
+.msg img, .msg video {
+  max-width: 250px;
+  margin-top: 5px;
+  border-radius: 6px;
+  display: block;
+}
+input, button {
+  background: #333;
+  color: #eee;
+  border: 1px solid #555;
+  padding: 6px;
+  margin: 4px 0;
+}
 </style>
 </head>
 <body>
-<h2>💬 Чат с фото и видео (Base64)</h2>
+<h2>💬 Чат с фото и видео (Base64)v2.0</h2>
 <p>Ваш ID: <span id="myid">...</span></p>
 
 <div id="chat"></div>
@@ -56,14 +56,14 @@ const clientId = crypto.randomUUID();
 document.getElementById("myid").textContent = clientId;
 const chat = document.getElementById("chat");
 
-// ===== Регистрация =====
+// Регистрация
 fetch(`${SERVER}/register`, {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ id: clientId, ip: "0.0.0.0", port: 0 })
 });
 
-// ===== Добавление сообщения в чат =====
+// Добавление сообщения в чат
 function addMsg(text, media=null, type=null) {
   const div = document.createElement("div");
   div.className = "msg";
@@ -84,7 +84,7 @@ function addMsg(text, media=null, type=null) {
   chat.scrollTop = chat.scrollHeight;
 }
 
-// ===== Отправка сообщения или файла =====
+// Отправка текста или медиа
 document.getElementById("send").addEventListener("click", async () => {
   const to = document.getElementById("to").value.trim();
   const text = document.getElementById("text").value.trim();
@@ -92,46 +92,39 @@ document.getElementById("send").addEventListener("click", async () => {
 
   if (!to && !text && !file) return alert("Введите сообщение или выберите файл");
 
-  let mediaData = null;
-  let mediaType = null;
-
   if (file) {
-    mediaType = file.type;
     const reader = new FileReader();
     reader.onload = async () => {
-      mediaData = reader.result; // base64
-      await send(to, text, mediaData, mediaType);
+      const mediaData = reader.result; // Base64
+      const payload = { from: clientId, to, text, media: mediaData, type: file.type };
+      await sendMessage(payload);
     };
     reader.readAsDataURL(file);
   } else {
-    await send(to, text, null, null);
+    const payload = { from: clientId, to, text, media: null, type: null };
+    await sendMessage(payload);
   }
 
   document.getElementById("text").value = "";
   document.getElementById("file").value = "";
 });
 
-// ===== Функция отправки =====
-async function send(to, text, media, type) {
+// Функция отправки сообщения
+async function sendMessage(payload) {
   try {
-    const payload = { from: clientId, to, text, media, type };
     const res = await fetch(`${SERVER}/send`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
-    if (res.ok) {
-      addMsg(`✅ Отправлено → ${to}: ${text}`, media, type);
-    } else {
-      const t = await res.text();
-      addMsg("❌ Ошибка отправки: " + t);
-    }
+    if (res.ok) addMsg(`✅ Отправлено → ${payload.to}: ${payload.text}`, payload.media, payload.type);
+    else addMsg("❌ Ошибка отправки: " + (await res.text()));
   } catch (e) {
     addMsg("❌ Ошибка отправки: " + e);
   }
 }
 
-// ===== Получение сообщений =====
+// Получение сообщений
 const seen = new Set();
 async function pollMessages() {
   try {
