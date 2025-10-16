@@ -40,7 +40,7 @@ input, button {
 </style>
 </head>
 <body>
-<h2>💬 Чат с фото и видео (Base64)v2.0</h2>
+<h2>💬 Чат с фото и видео (Base64)v3.0</h2>
 <p>Ваш ID: <span id="myid">...</span></p>
 
 <div id="chat"></div>
@@ -51,29 +51,29 @@ input, button {
 <button id="send">Отправить</button>
 
 <script>
-const SERVER = "https://send-gvt0.onrender.com";
+const SERVER = "https://send-gvt0.onrender.com"; // твой сервер
 const clientId = crypto.randomUUID();
 document.getElementById("myid").textContent = clientId;
 const chat = document.getElementById("chat");
 
-// Регистрация
+// ===== Регистрация клиента =====
 fetch(`${SERVER}/register`, {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({ id: clientId, ip: "0.0.0.0", port: 0 })
 });
 
-// Добавление сообщения в чат
+// ===== Добавление сообщения в чат =====
 function addMsg(text, media=null, type=null) {
   const div = document.createElement("div");
   div.className = "msg";
   div.textContent = text;
   if (media) {
-    if (type.startsWith("image")) {
+    if (type && type.startsWith("image")) {
       const img = document.createElement("img");
       img.src = media;
       div.appendChild(img);
-    } else if (type.startsWith("video")) {
+    } else if (type && type.startsWith("video")) {
       const video = document.createElement("video");
       video.src = media;
       video.controls = true;
@@ -84,8 +84,8 @@ function addMsg(text, media=null, type=null) {
   chat.scrollTop = chat.scrollHeight;
 }
 
-// Отправка текста или медиа
-document.getElementById("send").addEventListener("click", async () => {
+// ===== Отправка сообщения или медиа =====
+document.getElementById("send").addEventListener("click", () => {
   const to = document.getElementById("to").value.trim();
   const text = document.getElementById("text").value.trim();
   const file = document.getElementById("file").files[0];
@@ -95,21 +95,21 @@ document.getElementById("send").addEventListener("click", async () => {
   if (file) {
     const reader = new FileReader();
     reader.onload = async () => {
-      const mediaData = reader.result; // Base64
+      const mediaData = reader.result; // Base64 с префиксом data:image/... или data:video/...
       const payload = { from: clientId, to, text, media: mediaData, type: file.type };
       await sendMessage(payload);
     };
     reader.readAsDataURL(file);
   } else {
     const payload = { from: clientId, to, text, media: null, type: null };
-    await sendMessage(payload);
+    sendMessage(payload);
   }
 
   document.getElementById("text").value = "";
   document.getElementById("file").value = "";
 });
 
-// Функция отправки сообщения
+// ===== Отправка JSON на сервер =====
 async function sendMessage(payload) {
   try {
     const res = await fetch(`${SERVER}/send`, {
@@ -124,7 +124,7 @@ async function sendMessage(payload) {
   }
 }
 
-// Получение сообщений
+// ===== Получение сообщений каждые 3 секунды =====
 const seen = new Set();
 async function pollMessages() {
   try {
