@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>Render Chat Client</title>
+  <title>Render Chat Client + Фото</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -28,18 +28,29 @@
       background: #2a2a2a;
       padding: 5px 10px;
       border-radius: 5px;
+      word-wrap: break-word;
+    }
+    .msg img {
+      max-width: 100%;
+      border-radius: 8px;
+      margin-top: 5px;
     }
     #input-area {
       display: flex;
+      flex-direction: column;
       gap: 10px;
       width: 600px;
+    }
+    .inputs {
+      display: flex;
+      gap: 10px;
     }
     input, button {
       padding: 10px;
       border: none;
       border-radius: 5px;
     }
-    input {
+    input[type="text"] {
       flex: 1;
     }
     button {
@@ -57,15 +68,20 @@
   </style>
 </head>
 <body>
-  <h1>💬 Render Chat Client v1.0</h1>
-  <p>Ваш ID: <b id="client-id"></b></p>
+  <h1>💬 Render Chat + Фото</h1>
+  <p>Ваш ID: <b id="client-id"></b>
+     <button id="copy-id">📋 Скопировать</button>
+  </p>
 
   <div id="chat"></div>
 
   <div id="input-area">
-    <input id="to" placeholder="Кому (client_id / group / all)" />
-    <input id="text" placeholder="Сообщение..." />
-    <button id="send">Отправить</button>
+    <div class="inputs">
+      <input id="to" type="text" placeholder="Кому (client_id / group / all)" />
+      <input id="text" type="text" placeholder="Сообщение..." />
+      <input id="file" type="file" accept="image/*" />
+      <button id="send">📤</button>
+    </div>
   </div>
 
   <div id="clients">
@@ -76,16 +92,25 @@
   <script>
     const SERVER = "https://send-gvt0.onrender.com";
     const clientId = crypto.randomUUID();
-    document.getElementById("client-id").textContent = clientId;
-
-    const chat = document.getElementById("chat");
     const POLL_INTERVAL = 3000;
     const seen = new Set();
+    const chat = document.getElementById("chat");
+    document.getElementById("client-id").textContent = clientId;
 
-    function addMsg(text) {
+    function addMsg(text, from, to) {
       const div = document.createElement("div");
       div.className = "msg";
-      div.textContent = text;
+      if (from && to)
+        div.innerHTML = `<b>${from} → ${to}:</b> ${text}`;
+      else div.textContent = text;
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function addImageMsg(from, to, base64) {
+      const div = document.createElement("div");
+      div.className = "msg";
+      div.innerHTML = `<b>${from} → ${to}:</b><br><img src="${base64}"/>`;
       chat.appendChild(div);
       chat.scrollTop = chat.scrollHeight;
     }
@@ -97,9 +122,8 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id: clientId })
         });
-        const text = await res.text();
         if (res.ok) addMsg("✅ Зарегистрирован на сервере");
-        else addMsg("❌ Ошибка регистрации: " + text);
+        else addMsg("❌ Ошибка регистрации: " + (await res.text()));
       } catch (e) {
         addMsg("❌ Не удалось зарегистрироваться: " + e);
       }
@@ -114,7 +138,7 @@
           const data = JSON.parse(text);
           clients = data.clients || [];
         } catch {
-          addMsg("⚠️ Сервер вернул не-JSON: " + text);
+          addMsg("⚠️ Сервер вернул не JSON: " + text);
         }
         document.getElementById("clientList").textContent = "Клиенты: " + clients.join(", ");
       } catch (e) {
@@ -125,27 +149,50 @@
     async function sendMessage() {
       const to = document.getElementById("to").value.trim();
       const text = document.getElementById("text").value.trim();
-      if (!to || !text) return;
+      const fileInput = document.getElementById("file");
+
+      if (!to) return alert("Укажи получателя!");
+
+      let payload = { from: clientId, to, text };
+      if (fileInput.files.length > 0) {
+        const file = fileInput.files[0];
+        const base64 = await toBase64(file);
+        payload.text = "[image]" + base64; // помечаем как фото
+        fileInput.value = "";
+      }
 
       try {
         const res = await fetch(`${SERVER}/send`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ from: clientId, to, text })
+          body: JSON.stringify(payload)
         });
         const respText = await res.text();
-        if (res.ok) addMsg(`✅ Отправлено → ${to}: ${text}`);
-        else addMsg(`❌ Ошибка отправки (${res.status}): ${respText}`);
+        if (res.ok) {
+          if (payload.text.startsWith("[image]"))
+            addImageMsg("Вы", to, payload.text.slice(7));
+          else addMsg(`✅ Вы → ${to}: ${text}`);
+          document.getElementById("text").value = "";
+        } else addMsg(`❌ Ошибка отправки: ${respText}`);
       } catch (e) {
         addMsg("❌ Ошибка отправки: " + e);
       }
+    }
+
+    function toBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
     }
 
     async function pollMessages() {
       try {
         const res = await fetch(`${SERVER}/messages/${clientId}`);
         const text = await res.text();
-        if (!text.trim()) return; // пустой ответ — ничего не делать
+        if (!text.trim()) return;
 
         let data;
         try {
@@ -157,15 +204,26 @@
 
         for (const msg of data.messages || []) {
           const key = `${msg.from}-${msg.to}-${msg.text}`;
-          if (!seen.has(key)) {
-            addMsg(`📩 ${msg.from} → ${msg.to}: ${msg.text}`);
-            seen.add(key);
+          if (seen.has(key)) continue;
+          seen.add(key);
+
+          if (msg.text.startsWith("[image]")) {
+            const base64 = msg.text.slice(7);
+            addImageMsg(msg.from, msg.to, base64);
+          } else {
+            addMsg(msg.text, msg.from, msg.to);
           }
         }
       } catch (e) {
         addMsg("❌ Ошибка получения сообщений: " + e);
       }
     }
+
+    // Кнопка "Скопировать ID"
+    document.getElementById("copy-id").addEventListener("click", () => {
+      navigator.clipboard.writeText(clientId);
+      addMsg("📋 ID скопирован в буфер обмена");
+    });
 
     document.getElementById("send").addEventListener("click", sendMessage);
     document.getElementById("loadClients").addEventListener("click", listClients);
