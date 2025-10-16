@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Render Chat Client</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #111;
+      color: #eee;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+    #chat {
+      width: 600px;
+      background: #1e1e1e;
+      border-radius: 10px;
+      padding: 15px;
+      height: 400px;
+      overflow-y: auto;
+      margin-bottom: 15px;
+      box-shadow: 0 0 10px #000;
+    }
+    #input-area {
+      display: flex;
+      gap: 10px;
+      width: 600px;
+    }
+    input, button {
+      padding: 10px;
+      border: none;
+      border-radius: 5px;
+    }
+    input {
+      flex: 1;
+    }
+    button {
+      background: #2b8cff;
+      color: white;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    button:hover {
+      background: #176de0;
+    }
+    #clients {
+      margin-top: 10px;
+      width: 600px;
+    }
+    .msg {
+      margin: 5px 0;
+      padding: 5px 10px;
+      background: #2a2a2a;
+      border-radius: 5px;
+    }
+  </style>
+</head>
+<body>
+  <h1>💬 Render Chat Client</h1>
+  <p>Ваш ID: <b id="client-id"></b></p>
+
+  <div id="chat"></div>
+
+  <div id="input-area">
+    <input id="to" placeholder="Кому (client_id / group / all)" />
+    <input id="text" placeholder="Сообщение..." />
+    <button id="send">Отправить</button>
+  </div>
+
+  <div id="clients">
+    <button id="loadClients">Показать клиентов</button>
+    <div id="clientList"></div>
+  </div>
+
+  <script>
+    const SERVER = "https://send-gvt0.onrender.com";
+    const clientId = crypto.randomUUID();
+    const POLL_INTERVAL = 3000;
+    document.getElementById("client-id").textContent = clientId;
+
+    const chat = document.getElementById("chat");
+
+    async function register() {
+      try {
+        const res = await fetch(`${SERVER}/register`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: clientId })
+        });
+        if (res.ok) {
+          addMsg("✅ Зарегистрирован на сервере");
+        } else {
+          addMsg("❌ Ошибка регистрации");
+        }
+      } catch (e) {
+        addMsg("❌ Не удалось зарегистрироваться: " + e);
+      }
+    }
+
+    async function listClients() {
+      try {
+        const res = await fetch(`${SERVER}/clients`);
+        const data = await res.json();
+        const clients = data.clients || [];
+        document.getElementById("clientList").textContent = "Клиенты: " + clients.join(", ");
+      } catch {
+        document.getElementById("clientList").textContent = "Ошибка получения списка клиентов";
+      }
+    }
+
+    async function sendMessage() {
+      const to = document.getElementById("to").value.trim();
+      const text = document.getElementById("text").value.trim();
+      if (!to || !text) return;
+      try {
+        const res = await fetch(`${SERVER}/send`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ from: clientId, to, text })
+        });
+        if (res.ok) {
+          addMsg(`✅ Отправлено ${to}: ${text}`);
+          document.getElementById("text").value = "";
+        } else {
+          const t = await res.text();
+          addMsg("❌ Ошибка отправки: " + t);
+        }
+      } catch (e) {
+        addMsg("❌ Ошибка отправки: " + e);
+      }
+    }
+
+    const seen = new Set();
+
+    async function pollMessages() {
+      try {
+        const res = await fetch(`${SERVER}/messages/${clientId}`);
+        const data = await res.json();
+        for (const msg of data.messages || []) {
+          const key = ${msg.from}-${msg.to}-${msg.text};
+          if (!seen.has(key)) {
+            addMsg(`📩 ${msg.from} → ${msg.to}: ${msg.text}`);
+            seen.add(key);
+          }
+        }
+      } catch (e) {
+        addMsg("❌ Ошибка получения сообщений: " + e);
+      }
+    }
+
+    function addMsg(text) {
+      const div = document.createElement("div");
+      div.className = "msg";
+      div.textContent = text;
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    document.getElementById("send").addEventListener("click", sendMessage);
+    document.getElementById("loadClients").addEventListener("click", listClients);
+
+    register();
+    setInterval(pollMessages, POLL_INTERVAL);
+  </script>
+</body>
+</html>
