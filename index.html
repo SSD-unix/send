@@ -1,1 +1,126 @@
-che 
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🌐 Ознакомительный сайт API</title>
+<style>
+body {
+  margin: 0;
+  font-family: "Segoe UI", Roboto, sans-serif;
+  background: linear-gradient(135deg, #0f0f10, #1e1e22);
+  color: #f1f1f1;
+}
+header {
+  text-align: center;
+  padding: 60px 20px 40px 20px;
+  background: linear-gradient(90deg, #6ff, #9f6);
+  color: #000;
+}
+header h1 {
+  margin: 0;
+  font-size: 2.2em;
+}
+header p {
+  font-size: 1.2em;
+  margin-top: 10px;
+}
+section {
+  max-width: 900px;
+  margin: 40px auto;
+  padding: 0 20px;
+}
+h2 {
+  color: #4facfe;
+}
+ul {
+  list-style: none;
+  padding-left: 0;
+}
+li {
+  margin: 10px 0;
+  background: #242424;
+  padding: 12px;
+  border-radius: 8px;
+}
+button {
+  cursor: pointer;
+  background: linear-gradient(90deg, #f6d365, #fda085);
+  color: #000;
+  border: none;
+  padding: 12px 20px;
+  font-size: 1em;
+  border-radius: 8px;
+  margin-top: 20px;
+}
+button:hover {
+  filter: brightness(1.1);
+}
+pre {
+  background: #222;
+  padding: 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+}
+footer {
+  text-align: center;
+  padding: 20px;
+  opacity: 0.7;
+}
+@media (max-width: 600px) {
+  header h1 { font-size: 1.6em; }
+  header p { font-size: 1em; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🌐 Send API Demo</h1>
+  <p>Отправляйте сообщения, фото и видео с любого языка программирования через Base64!</p>
+</header>
+
+<section>
+  <h2>Что такое наш API?</h2>
+  <p>Наш API позволяет разработчикам легко интегрировать функционал обмена сообщениями с фото и видео. Вы можете работать с JavaScript, Python, C, Java и другими языками.</p>
+</section>
+
+<section>
+  <h2>Преимущества</h2>
+  <ul>
+    <li>📩 Отправка текста, изображений и видео</li>
+    <li>🌐 Поддержка всех языков программирования</li>
+    <li>🖥️ Работает на любом устройстве и платформе</li>
+    <li>💡 Простая интеграция и быстрое начало</li>
+  </ul>
+</section>
+
+<section>
+  <h2>Пример использования (JavaScript)</h2>
+  <pre>
+fetch("https://send-gvt0.onrender.com/send", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    from: "ВашID",
+    to: "all",
+    text: "Привет!",
+    media: null,
+    type: null
+  })
+});
+  </pre>
+</section>
+
+<section style="text-align:center;">
+  <button onclick="window.open('https://send.հհ.հայ/send','_blank')">
+    🌐 Перейти на сайт клиента
+  </button>
+</section>
+
+<footer>
+  SSD-UNIX 2025
+</footer>
+
+</body>
+</html>
