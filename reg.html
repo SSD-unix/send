@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>FastAPI Hosting — Регистрация</title>
+<style>
+body {font-family: Arial, sans-serif; background: #0f172a; color: #e2e8f0; display: flex; justify-content: center; align-items: center; height: 100vh;}
+.container {background: #020617; padding: 30px; border-radius: 10px; width: 350px;}
+h1 {text-align: center;}
+input {width: 100%; padding: 10px; margin: 8px 0; border-radius: 6px; border: 1px solid #334155; background: #071129; color: #e2e8f0;}
+button {width: 100%; padding: 10px; margin-top: 10px; border: none; border-radius: 6px; background: #2563eb; color: white; cursor: pointer;}
+small {display: block; text-align: center; color: #94a3b8; margin-top: 10px;}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>Регистрация</h1>
+<input type="text" id="username" placeholder="Username">
+<input type="password" id="password" placeholder="Password">
+<button onclick="register()">Register</button>
+<small id="msg"></small>
+
+<hr style="margin:20px 0; border-color:#334155;">
+
+<h1>Login</h1>
+<input type="text" id="loginUsername" placeholder="Username">
+<input type="password" id="loginPassword" placeholder="Password">
+<button onclick="login()">Login</button>
+<small id="loginMsg"></small>
+</div>
+
+<script>
+let token = "";
+
+function register(){
+    const username = document.getElementById('username').value;
+    const password = document.getElementById('password').value;
+    const formData = new FormData();
+    formData.append("username", username);
+    formData.append("password", password);
+
+    fetch("/register", {method:"POST", body: formData})
+    .then(r=>r.json())
+    .then(res=>{
+        if(res.ok){
+            document.getElementById('msg').innerText = "✅ Registered! You can login now.";
+        } else {
+            document.getElementById('msg').innerText = res.error || "❌ Registration failed";
+        }
+    });
+}
+
+function login(){
+    const username = document.getElementById('loginUsername').value;
+    const password = document.getElementById('loginPassword').value;
+    const formData = new URLSearchParams();
+    formData.append("username", username);
+    formData.append("password", password);
+
+    fetch("/token", {
+        method: "POST",
+        headers: {"Content-Type": "application/x-www-form-urlencoded"},
+        body: formData
+    })
+    .then(r=>r.json())
+    .then(res=>{
+        if(res.access_token){
+            token = res.access_token;
+            document.getElementById('loginMsg').innerText = "✅ Logged in!";
+            localStorage.setItem("token", token);
+        } else {
+            document.getElementById('loginMsg').innerText = res.error || "❌ Login failed";
+        }
+    });
+}
+</script>
+</body>
+</html>
